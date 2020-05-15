@@ -19,6 +19,7 @@ GENRES = [
     ('Pop', 'Pop'),
     ('Punk', 'Punk'),
     ('R&B', 'R&B'),
+    ('Swing','Swing'),
     ('Reggae', 'Reggae'),
     ('Rock n Roll', 'Rock n Roll'),
     ('Soul', 'Soul'),
@@ -125,8 +126,8 @@ class VenueForm(Form):
         "website",
         validators=[URL()]
     )
-    seeking_venue = BooleanField(
-        "seeking_venue",
+    seeking_talent = BooleanField(
+        "seeking_talent",
         default=True, false_values=(False, "false", "")
     )
     seeking_description = StringField("seeking_description")
@@ -170,4 +171,4 @@ class ArtistForm(Form):
     seeking_description = StringField("seeking_description")
 
 
-# TODO IMPLEMENT NEW ARTIST FORM AND NEW SHOW FORM
+# DONE IMPLEMENT NEW ARTIST FORM AND NEW SHOW FORM
