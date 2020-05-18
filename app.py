@@ -46,10 +46,7 @@ class Venue(db.Model):
     facebook_link = db.Column(db.String(120))
     seeking_talent = db.Column(db.Boolean, default=True, nullable=False)
     seeking_description = db.Column(db.String())
-    shows = db.relationship('Show', backref='venues')
-
-    def __repr__(self):
-        return f'<Venue {self.id},{self.name}>'
+    shows = db.relationship('Show', backref='venues', lazy='dynamic')
 
     def get_json(self):
         return{
@@ -58,7 +55,7 @@ class Venue(db.Model):
             'genres': self.genres,
             'city': self.city,
             'state': self.state,
-            'address':self.address,
+            'address': self.address,
             'phone': self.phone,
             'website': self.website,
             'facebook_link': self.facebook_link,
@@ -66,6 +63,9 @@ class Venue(db.Model):
             'seeking_description': self.seeking_description,
             'image_link': self.image_link,
         }
+
+    def __repr__(self):
+        return f'<Venue {self.id},{self.name}>'
 
     # DONE: implement any missing fields, as a database migration using Flask-Migrate
 
@@ -84,7 +84,7 @@ class Artist(db.Model):
     facebook_link = db.Column(db.String(120))
     seeking_venue = db.Column(db.Boolean, default=True, nullable=False)
     seeking_description = db.Column(db.String())
-    shows = db.relationship('Show', backref='artists')
+    shows = db.relationship('Show', backref='artists', lazy='dynamic')
 
     def __init__(self, name, genres, city, state, phone, image_link, website, facebook_link,
                  seeking_venue=False, seeking_description=""):
@@ -161,25 +161,37 @@ def index():
 def venues():
     # DONE: replace with real venues data.
     #       num_shows should be aggregated based on number of upcoming shows per venue.
-    start_time = request.form['start_time']
+    # start_time = request.form['start_time']
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     venue_data = []
-    venues = db.session.query(Venue.state, Venue.city, db.func.count(Venue.id).label('count_id')).group_by(Venue.city,Venue.state).all()
+    venues = Venue.query.group_by(
+        Venue.id, Venue.city, Venue.state).all()  # (Venue.id, Venue.city, Venue.state)
     # add a call to join the show database and retrive the show count and the data
-    for s,c,i in venues:
+    listed = []
+    for venue in venues:
+        print(venue.id, venue.city, venue.state)
+        if venue.city in listed:
+            continue
+        listed.append(venue.city)
         venues_dict = {}
-        venues_dict["city"] = c
-        venues_dict["state"] = s
-        ven = db.session.query(Venue.id, Venue.name,Venue.upcoming_shows_count).filter_by(city=c)
+        venues_dict["city"] = venue.city
+        venues_dict["state"] = venue.state
+        ven = db.session.query(Venue.id, Venue.name).filter_by(city=venue.city)
         ven_list = []
-        for vid,vname,vshow in ven:
+        for vid, vname in ven:
+            upcoming_shows = Show.query.filter(
+                Show.venue_id == vid).filter(Show.start_time > now).all()
+            print(upcoming_shows)
             temp = {}
-            temp["id"]=vid
-            temp["name"]=vname
-            temp["num_upcoming_shows"]=vshow
+            temp["id"] = vid
+            temp["name"] = vname
+            temp["num_upcoming_shows"] = len(
+                upcoming_shows)  # update the value here
             ven_list.append(temp)
         venues_dict["venues"] = ven_list
+        print(venues_dict)
         venue_data.append(venues_dict)
+    print(venue_data)
     return render_template('pages/venues.html', areas=venue_data)
 
 
@@ -190,11 +202,12 @@ def search_venues():
     # search for "Music" should return "The Musical Hop" and "Park Square Live Music & Coffee"
     term = request.form.get('search_term', '')
     print('%'+term+'%')
-    results = db.session.query(Venue.id,Venue.name,Venue.upcoming_shows_count).filter(Venue.name.ilike('%'+term+'%'))
+    results = db.session.query(Venue.id, Venue.name, Venue.upcoming_shows_count).filter(
+        Venue.name.ilike('%'+term+'%'))
     print(results.all())
     search_data = {}
     data = []
-    for vid,vname,vshowcount in results:
+    for vid, vname, vshowcount in results:
         temp = {}
         temp['id'] = vid
         temp['name'] = vname
@@ -210,7 +223,7 @@ def search_venues():
             "num_upcoming_shows": 0,
         }]
     }
-    
+
     return render_template('pages/search_venues.html', results=search_data, search_term=term)
 
 
@@ -218,7 +231,44 @@ def search_venues():
 def show_venue(venue_id):
     # shows the venue page with the given venue_id
     # DONE: replace with real venue data from the venues table, using venue_id
-    return render_template('pages/show_venue.html', venue=Venue.query.get(venue_id))
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    v_query = Venue.query.get(venue_id)
+    venue_details = v_query.get_json()
+    upcoming_shows = Show.query.filter(
+        Show.venue_id == venue_id).filter(Show.start_time > now).all()
+    past_shows = Show.query.filter(
+        Show.venue_id == venue_id).filter(Show.start_time <= now).all()
+    upcoming = []
+    for show in upcoming_shows:
+        print(show.id, show.artist_id)
+        temp = {}
+        a_info = Artist.query.filter(
+            Artist.id == show.artist_id).first()
+        temp['artist_id'] = show.id
+        temp['artist_name'] = a_info.name
+        temp['artist_image_link'] = a_info.image_link
+        temp['start_time'] = show.start_time
+        upcoming.append(temp)
+
+    past = []
+    for show in past_shows:
+        print(show.id, show.artist_id)
+        temp = {}
+        a_info = Artist.query.filter(
+            Artist.id == show.artist_id).first()
+        temp['artist_id'] = show.id
+        temp['artist_name'] = a_info.name
+        temp['artist_image_link'] = a_info.image_link
+        temp['start_time'] = show.start_time
+        past.append(temp)
+
+    venue_details['upcoming_shows'] = upcoming
+    venue_details['past_shows'] = past
+    venue_details["past_shows_count"] = len(past_shows)
+    venue_details["upcoming_shows_count"] = len(upcoming_shows)
+
+    print(venue_details)
+    return render_template('pages/show_venue.html', venue=venue_details)
 
 #  Create Venue
 #  ----------------------------------------------------------------
@@ -277,7 +327,7 @@ def delete_venue(venue_id):
         Venue.query.filter_by(id=venue_id).delete()
         db.session.commit()
     except:
-        db.session.rollback() 
+        db.session.rollback()
     finally:
         db.session.close()
     # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
@@ -306,11 +356,12 @@ def artists():
 def search_artists():
     term = request.form.get('search_term', '')
     print('%'+term+'%')
-    results = db.session.query(Artist.id,Artist.name,Artist.upcoming_shows_count).filter(Artist.name.ilike('%'+term+'%'))
+    results = db.session.query(Artist.id, Artist.name, Artist.upcoming_shows_count).filter(
+        Artist.name.ilike('%'+term+'%'))
     print(results.all())
     search_data = {}
     data = []
-    for aid,aname,ashowcount in results:
+    for aid, aname, ashowcount in results:
         temp = {}
         temp['id'] = aid
         temp['name'] = aname
@@ -336,79 +387,44 @@ def search_artists():
 def show_artist(artist_id):
     # shows the venue page with the given venue_id
     # DONE: replace with real venue data from the venues table, using venue_id
-    data1 = {
-        "id": 4,
-        "name": "Guns N Petals",
-        "genres": ["Rock n Roll"],
-        "city": "San Francisco",
-        "state": "CA",
-        "phone": "326-123-5000",
-        "website": "https://www.gunsnpetalsband.com",
-        "facebook_link": "https://www.facebook.com/GunsNPetals",
-        "seeking_venue": True,
-        "seeking_description": "Looking for shows to perform at in the San Francisco Bay Area!",
-        "image_link": "https://images.unsplash.com/photo-1549213783-8284d0336c4f?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=300&q=80",
-        "past_shows": [{
-            "venue_id": 1,
-            "venue_name": "The Musical Hop",
-            "venue_image_link": "https://images.unsplash.com/photo-1543900694-133f37abaaa5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=400&q=60",
-            "start_time": "2019-05-21T21:30:00.000Z"
-        }],
-        "upcoming_shows": [],
-        "past_shows_count": 1,
-        "upcoming_shows_count": 0,
-    }
-    data2 = {
-        "id": 5,
-        "name": "Matt Quevedo",
-        "genres": ["Jazz"],
-        "city": "New York",
-        "state": "NY",
-        "phone": "300-400-5000",
-        "facebook_link": "https://www.facebook.com/mattquevedo923251523",
-        "seeking_venue": False,
-        "image_link": "https://images.unsplash.com/photo-1495223153807-b916f75de8c5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=334&q=80",
-        "past_shows": [{
-            "venue_id": 3,
-            "venue_name": "Park Square Live Music & Coffee",
-            "venue_image_link": "https://images.unsplash.com/photo-1485686531765-ba63b07845a7?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=747&q=80",
-            "start_time": "2019-06-15T23:00:00.000Z"
-        }],
-        "upcoming_shows": [],
-        "past_shows_count": 1,
-        "upcoming_shows_count": 0,
-    }
-    data3 = {
-        "id": 6,
-        "name": "The Wild Sax Band",
-        "genres": ["Jazz", "Classical"],
-        "city": "San Francisco",
-        "state": "CA",
-        "phone": "432-325-5432",
-        "seeking_venue": False,
-        "image_link": "https://images.unsplash.com/photo-1558369981-f9ca78462e61?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=794&q=80",
-        "past_shows": [],
-        "upcoming_shows": [{
-            "venue_id": 3,
-            "venue_name": "Park Square Live Music & Coffee",
-            "venue_image_link": "https://images.unsplash.com/photo-1485686531765-ba63b07845a7?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=747&q=80",
-            "start_time": "2035-04-01T20:00:00.000Z"
-        }, {
-            "venue_id": 3,
-            "venue_name": "Park Square Live Music & Coffee",
-            "venue_image_link": "https://images.unsplash.com/photo-1485686531765-ba63b07845a7?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=747&q=80",
-            "start_time": "2035-04-08T20:00:00.000Z"
-        }, {
-            "venue_id": 3,
-            "venue_name": "Park Square Live Music & Coffee",
-            "venue_image_link": "https://images.unsplash.com/photo-1485686531765-ba63b07845a7?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=747&q=80",
-            "start_time": "2035-04-15T20:00:00.000Z"
-        }],
-        "past_shows_count": 0,
-        "upcoming_shows_count": 3,
-    }
-    # data = list(filter(lambda d: d['id'] == artist_id, [data1, data2, data3]))[0]
-    return render_template('pages/show_artist.html', artist=Artist.query.get(artist_id))
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    a_query = Artist.query.get(artist_id)
+    artist_details = a_query.info()
+    upcoming_shows = Show.query.filter(
+        Show.artist_id == artist_id).filter(Show.start_time > now).all()
+    past_shows = Show.query.filter(
+        Show.artist_id == artist_id).filter(Show.start_time <= now).all()
+    upcoming = []
+    for show in upcoming_shows:
+        print(show.id, show.venue_id)
+        temp = {}
+        v_info = Venue.query.filter(
+            Venue.id == show.venue_id).first()
+        temp['venue_id'] = show.id
+        temp['venue_name'] = v_info.name
+        temp['venue_image_link'] = v_info.image_link
+        temp['start_time'] = show.start_time
+        upcoming.append(temp)
+
+    past = []
+    for show in past_shows:
+        print(show.id, show.venue_id)
+        temp = {}
+        v_info = Venue.query.filter(
+            Venue.id == show.venue_id).first()
+        temp['venue_id'] = show.id
+        temp['venue_name'] = v_info.name
+        temp['venue_image_link'] = v_info.image_link
+        temp['start_time'] = show.start_time
+        past.append(temp)
+
+    artist_details['upcoming_shows'] = upcoming
+    artist_details['past_shows'] = past
+    artist_details["past_shows_count"] = len(past_shows)
+    artist_details["upcoming_shows_count"] = len(upcoming_shows)
+
+    print(artist_details)
+    return render_template('pages/show_artist.html', artist=artist_details)
 
 #  Update
 #  ----------------------------------------------------------------
@@ -629,22 +645,24 @@ def shows():
         "start_time": "2035-04-15T20:00:00.000Z"
     }]
     shows_data = []
-    venue_artist = db.session.query(Show.venue_id,Show.artist_id,Show.start_time)
+    venue_artist = db.session.query(
+        Show.venue_id, Show.artist_id, Show.start_time)
     print(venue_artist)
     for venue, artist, start in venue_artist:
         temp = {}
-        print(venue,artist)
+        print(venue, artist)
         venue_details = db.session.query(Venue.name).filter_by(id=venue).all()
-        artist_details = db.session.query(Artist.name, Artist.image_link).filter_by(id=artist).all()
+        artist_details = db.session.query(
+            Artist.name, Artist.image_link).filter_by(id=artist).all()
         (name, image) = artist_details[0]
         (venue_name,) = venue_details[0]
-        print(venue_name,name,image)
-        temp['venue_id']=venue
-        temp['venue_name']= venue_name
-        temp['artist_id']=artist
-        temp['artist_name']=name
-        temp['artist_image_link']=image
-        temp['start_time']=start
+        print(venue_name, name, image)
+        temp['venue_id'] = venue
+        temp['venue_name'] = venue_name
+        temp['artist_id'] = artist
+        temp['artist_name'] = name
+        temp['artist_image_link'] = image
+        temp['start_time'] = start
         shows_data.append(temp)
 
     return render_template('pages/shows.html', shows=shows_data)
@@ -662,13 +680,14 @@ def create_show_submission():
     print('Recieved show entry', request.form)
     try:
         show = Show(artist_id=request.form['artist_id'],
-                      venue_id=request.form['venue_id'],
-                      start_time=request.form['start_time']
-                      )
-        #modify the show count of artists and venues based on the start time
+                    venue_id=request.form['venue_id'],
+                    start_time=request.form['start_time']
+                    )
+        # modify the show count of artists and venues based on the start time
         start_time = request.form['start_time']
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print(request.form['start_time'],now,request.form['artist_id'],request.form['venue_id'])
+        print(request.form['start_time'], now,
+              request.form['artist_id'], request.form['venue_id'])
         # artist =  db.session.query(Artist.upcoming_shows_count,Artist.past_shows_count).filter_by(id=request.form['artist_id']).first()
         # venue =  db.session.query(Venue.upcoming_shows_count,Venue.past_shows_count).filter_by(id=request.form['venue_id']).first()
         # print(artist,venue)
