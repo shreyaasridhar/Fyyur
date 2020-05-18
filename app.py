@@ -46,8 +46,6 @@ class Venue(db.Model):
     facebook_link = db.Column(db.String(120))
     seeking_talent = db.Column(db.Boolean, default=True, nullable=False)
     seeking_description = db.Column(db.String())
-    past_shows_count = db.Column(db.Integer)
-    upcoming_shows_count = db.Column(db.Integer)
     shows = db.relationship('Show', backref='venues')
 
     def __repr__(self):
@@ -86,8 +84,6 @@ class Artist(db.Model):
     facebook_link = db.Column(db.String(120))
     seeking_venue = db.Column(db.Boolean, default=True, nullable=False)
     seeking_description = db.Column(db.String())
-    past_shows_count = db.Column(db.Integer)
-    upcoming_shows_count = db.Column(db.Integer)
     shows = db.relationship('Show', backref='artists')
 
     def __init__(self, name, genres, city, state, phone, image_link, website, facebook_link,
@@ -165,8 +161,11 @@ def index():
 def venues():
     # DONE: replace with real venues data.
     #       num_shows should be aggregated based on number of upcoming shows per venue.
+    start_time = request.form['start_time']
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     venue_data = []
     venues = db.session.query(Venue.state, Venue.city, db.func.count(Venue.id).label('count_id')).group_by(Venue.city,Venue.state).all()
+    # add a call to join the show database and retrive the show count and the data
     for s,c,i in venues:
         venues_dict = {}
         venues_dict["city"] = c
@@ -666,7 +665,25 @@ def create_show_submission():
                       venue_id=request.form['venue_id'],
                       start_time=request.form['start_time']
                       )
-        
+        #modify the show count of artists and venues based on the start time
+        start_time = request.form['start_time']
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(request.form['start_time'],now,request.form['artist_id'],request.form['venue_id'])
+        # artist =  db.session.query(Artist.upcoming_shows_count,Artist.past_shows_count).filter_by(id=request.form['artist_id']).first()
+        # venue =  db.session.query(Venue.upcoming_shows_count,Venue.past_shows_count).filter_by(id=request.form['venue_id']).first()
+        # print(artist,venue)
+        # if start_time > now:
+        #     # if artist.upcoming_shows_count == None:
+        #     #     artist.upcoming_shows_count = 1
+        #     # else:
+        #     artist.upcoming_shows_count +=  1
+        #     # if venue.upcoming_shows_count == None:
+        #     #     venue.upcoming_shows_count = 1
+        #     # else:
+        #     venue.upcoming_shows_count += 1
+        # else:
+        #     artist.past_shows_count += 1
+        #     venue.past_shows_count += 1
         db.session.add(show)
         db.session.commit()
         flash('Show was successfully listed!')
