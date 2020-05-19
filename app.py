@@ -471,7 +471,7 @@ def edit_artist_submission(artist_id):
     if artist_data:
         if 'seeking_venue' in request.form:
             print("Seeking_venue", request.form['seeking_venue'])
-            seeking_venue = request.form['seeking_venue'] == 'on'
+            seeking_venue = request.form['seeking_venue'] == 'y'
 
         setattr(artist_data, 'name', request.form['name'])
         setattr(artist_data, 'genres', request.form.getlist('genres'))
