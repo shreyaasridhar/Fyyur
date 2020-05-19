@@ -282,7 +282,7 @@ def create_venue_form():
 
 @app.route('/venues/create', methods=['POST'])
 def create_venue_submission():
-    print('Recieved venue', request.form)
+    print('Received venue', request.form)
     seeking_talent = False
     seeking_description = ""
     try:
@@ -570,7 +570,7 @@ def create_artist_form():
 @app.route('/artists/create', methods=['POST'])
 def create_artist_submission():
     # called upon submitting the new artist listing form
-    print('Recieved artist', request.form)
+    print('Received artist', request.form)
     seeking_venue = False
     if 'seeking_venue' in request.form:
         print("Seeking_venue", request.form['seeking_venue'])
@@ -678,7 +678,7 @@ def create_shows():
 
 @app.route('/shows/create', methods=['POST'])
 def create_show_submission():
-    print('Recieved show entry', request.form)
+    print('Received show entry', request.form)
     try:
         show = Show(artist_id=request.form['artist_id'],
                     venue_id=request.form['venue_id'],
